@@ -1,0 +1,40 @@
+# Виртуальное окружение
+.venv/
+venv/
+
+# Данные и кэш
+__pycache__/
+*.pyc
+.chroma/
+data/
+*.log
+
+# Отчёты (опционально — закомментируйте, если хотите хранить)
+reports/*.json
+reports/*.docx
+reports/*.xlsx
+reports/*.md
+reports/*.pdf
+reports/*.svg
+reports/*.zip
+reports/*.png
+reports/.streamlit_state.pkl
+
+# Секреты
+.env
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Модели
+*.gguf
+models/
+
+# Docker volumes
+postgres_data/
+chroma_data/
+redis_data/
+ollama_data/
