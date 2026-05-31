@@ -1,191 +1,19 @@
 {
-  "system_name": "ПАК-DRBD-2",
-  "description": "Программно-аппаратный комплекс высокой доступности с синхронной репликацией DRBD и защитой до 6 категорий информации",
-  
+  "system_name": "Пример ПАК",
   "classification": {
-    "system_type": "ГИС государственного унитарного предприятия",
-    "organization_type": "государственное унитарное предприятие",
+    "system_type": "ГИС",
     "fstek_117_class": "К2",
-    "fstek_21_class": "2Г",
-    "fstek_239_class": "",
     "has_dsp": true,
-    "ispdn_category": "иные категории ПДн (ФИО, адрес, телефон)",
+    "ispdn_category": "иные",
     "ispdn_subjects_count": 50000,
-    "ispdn_subjects_category": "<100000",
-    "threat_type": "3-й тип (отсутствие недокументированных возможностей)",
+    "threat_type": "3-й тип",
     "pp1119_level": "УЗ-4"
   },
-  
-  "protected_info": {
-    "K1": "Персональные данные сотрудников (до 500 субъектов)",
-    "K2": "Служебная информация ограниченного распространения",
-    "K3": "Конфигурационная информация кластера (включая TLS-ключи)",
-    "K4": "Аудиторская информация (журналы безопасности)",
-    "K5": "Криптографические ключи (LUKS, SSH, TLS PSK)",
-    "K6": "Лицензионные ключи и серийные номера ПО"
-  },
-  
-  "target_kpis": {
-    "availability": "≥ 99.99%",
-    "rto_seconds": 60,
-    "rpo_bytes": 0,
-    "iops_read": 15000,
-    "iops_write": 8000,
-    "read_mb_s": 900,
-    "write_mb_s": 600,
-    "latency_ms": 5,
-    "drbd_bandwidth_gbps": 9.4
-  },
-  
   "components": [
     {
-      "component_name": "Сервер Kraftway TS3310 (hv-01, ИН-001)",
-      "component_type": "Серверная платформа",
-      "role": "Primary",
-      "certificate": "Сертификат ФСТЭК на платформу",
-      "configuration": {
-        "cpu": "2 × Intel Xeon Gold 6336Y (24 ядра/48 потоков каждый)",
-        "ram": "256 GB DDR4-3200 ECC RDIMM (8 × 32 GB)",
-        "os_disks": "2 × SSD 480 GB RAID-1",
-        "data_disks": "3 × SSD 3.84 TB JBOD",
-        "network": "6 × 10GE SFP+ + 1 × 1GE RJ-45 BMC",
-        "hardware_security": ["Электронный замок «Витязь 2.2» (прошивка 2.3+)", "Kaspersky Antivirus for UEFI"]
-      }
-    },
-    {
-      "component_name": "Сервер Kraftway TS3310 (hv-02, ИН-002)",
-      "component_type": "Серверная платформа",
-      "role": "Secondary",
-      "certificate": "Сертификат ФСТЭК на платформу",
-      "configuration": {
-        "cpu": "2 × Intel Xeon Gold 6336Y",
-        "ram": "256 GB DDR4-3200 ECC RDIMM",
-        "os_disks": "2 × SSD 480 GB RAID-1",
-        "data_disks": "3 × SSD 3.84 TB JBOD",
-        "network": "6 × 10GE SFP+ + 1 × 1GE RJ-45 BMC",
-        "hardware_security": ["Электронный замок «Витязь 2.2» (прошивка 2.3+)", "Kaspersky Antivirus for UEFI"]
-      }
-    },
-    {
-      "component_name": "Astra Linux Special Edition 1.8.5",
-      "component_type": "Операционная система",
-      "certificate": "ФСТЭК №2557 от 5.03.2026, действителен до 27.01.2031",
-      "configuration": {
-        "версия": "1.8.5 Смоленск",
-        "замкнутая_программная_среда": "ЗПС",
-        "мандатный_контроль": "PARSEC (уровни целостности 0-3)",
-        "аудит": "auditd включён",
-        "контроль_целостности": "AIDE",
-        "межсетевое_экранирование": "iptables/nftables",
-        "шифрование_дисков": "LUKS/dm-crypt (ГОСТ 34.12-2018, Кузнечик, AES-256-XTS)"
-      }
-    },
-    {
-      "component_name": "DRBD 8.4.11 с TLS",
-      "component_type": "Система репликации данных",
-      "configuration": {
-        "версия": "8.4.11",
-        "протокол": "Protocol C (синхронная репликация)",
-        "шифрование": "TLS (PSK-ключ)",
-        "сеть": "VLAN 200, MTU 9000 (Jumbo Frames)",
-        "контроль_целостности": "SHA-256 checksums",
-        "rpo": "0 байт",
-        "rto": "≤ 60 секунд"
-      }
-    },
-    {
-      "component_name": "Pacemaker 2.1.6 + Corosync 3.1.5",
-      "component_type": "Кластерное ПО высокой доступности",
-      "configuration": {
-        "pacemaker": "2.1.6",
-        "corosync": "3.1.5",
-        "кворум": "2 кольца (RING 0: VLAN 100, RING 1: VLAN 300)",
-        "stonith": "fence_ipmilan (IPMI 2.0, таймаут 30 сек)",
-        "иерархия_ресурсов": "DRBD → LVM → ФС → ВМ",
-        "автоматический_failover": "включён"
-      }
-    },
-    {
-      "component_name": "KVM + libvirt (astra-kvm)",
-      "component_type": "Гипервизор виртуализации",
-      "configuration": {
-        "компоненты": "qemu-kvm, libvirt-daemon-system, libvirt-clients, bridge-utils, virt-manager, ovmf",
-        "изоляция_вм": "cgroups, namespaces, PARSEC",
-        "live_миграция": "VLAN 300, QEMU TCP (порты 49152–49215)",
-        "образы_вм": "qcow2 на DRBD-томе lv_vm_images"
-      }
-    },
-    {
-      "component_name": "Kaspersky Endpoint Security для Linux 12.0+",
-      "component_type": "Антивирусная защита",
-      "certificate": "ФСТЭК №4012 от 15.03.2024",
-      "configuration": {
-        "версия": "12.0+",
-        "режим": "реального времени",
-        "область_действия": "хост-ОС, гостевые ВМ"
-      }
-    },
-    {
-      "component_name": "Suricata IDS 7.0+",
-      "component_type": "Система обнаружения вторжений",
-      "configuration": {
-        "версия": "7.0+",
-        "подключение": "SPAN-порт коммутатора MES5300-24",
-        "правила": "Emerging Threats (ET) Open",
-        "формат_журнала": "EVE JSON",
-        "интеграция": "Loki, Promtail, Alertmanager"
-      }
-    },
-    {
-      "component_name": "FreeIPA 4.9+",
-      "component_type": "Централизованная аутентификация",
-      "configuration": {
-        "версия": "4.9+",
-        "протоколы": "LDAP, Kerberos",
-        "клиенты": "hv-01, hv-02, гостевые ВМ"
-      }
-    },
-    {
-      "component_name": "Коммутаторы Eltex MES5300-24 + MES2300-24",
-      "component_type": "Сетевое оборудование",
-      "configuration": {
-        "коммутатор_данных": "2 × MES5300-24 (стек 100G DAC)",
-        "коммутатор_управления": "1 × MES2300-24",
-        "span_порт": "MES5300-24 #1, порт 13 (для Suricata)",
-        "vlans": {
-          "100": "Управление + Corosync RING 0",
-          "200": "Репликация DRBD (TLS)",
-          "300": "Миграция ВМ + Corosync RING 1",
-          "400": "Клиентский доступ"
-        }
-      }
-    },
-    {
-      "component_name": "Система мониторинга (Prometheus + Grafana + Loki)",
-      "component_type": "Мониторинг и журналирование",
-      "configuration": {
-        "prometheus": "2.45+ (метрики: node_exporter, drbd_exporter, pacemaker_exporter, libvirt_exporter)",
-        "grafana": "10.0 (дашборды: DRBD, Pacemaker, KVM, сеть, ресурсы)",
-        "loki": "актуальная (централизованные журналы, хранение 6 месяцев)",
-        "promtail": "агент сбора (syslog, auditd, DRBD, Suricata)",
-        "alertmanager": "оповещения (e-mail, ГосСОПКА API)"
-      }
-    },
-    {
-      "component_name": "Гостевые ВМ (Кадры, Документооборот)",
-      "component_type": "Прикладные информационные системы",
-      "configuration": {
-        "вм_кадры": {
-          "ос": "Astra Linux SE 1.7.9",
-          "данные": "ПДн сотрудников (К1, до 500 субъектов)",
-          "аутентификация": "FreeIPA клиент"
-        },
-        "вм_документооборот": {
-          "ос": "Astra Linux SE 1.7.9",
-          "данные": "Служебная информация (К2)",
-          "аутентификация": "FreeIPA клиент"
-        }
-      }
+      "component_name": "Astra Linux SE 1.7",
+      "component_type": "ОС",
+      "configuration": {"selinux": "enforcing"}
     }
   ]
 }
