@@ -1,0 +1,41 @@
+[
+  {
+    "name": "ГИС К2 + ДСП + УЗ-4",
+    "system_type": "ГИС государственного унитарного предприятия",
+    "organization_type": "государственное унитарное предприятие",
+    "fstek_117_class": "К2",
+    "fstek_21_class": "2Г",
+    "has_dsp": true,
+    "ispdn_category": "иные категории ПДн (ФИО, адрес, телефон)",
+    "ispdn_subjects_count": 50000,
+    "ispdn_subjects_category": "<100000",
+    "threat_type": "3-й тип (отсутствие недокументированных возможностей)",
+    "pp1119_level": "УЗ-4"
+  },
+  {
+    "name": "ГИС К1 + ДСП + УЗ-3",
+    "system_type": "ГИС государственного унитарного предприятия",
+    "organization_type": "государственное унитарное предприятие",
+    "fstek_117_class": "К1",
+    "fstek_21_class": "1Г",
+    "has_dsp": true,
+    "ispdn_category": "иные категории ПДн (ФИО, адрес, телефон)",
+    "ispdn_subjects_count": 50000,
+    "ispdn_subjects_category": "<100000",
+    "threat_type": "2-й тип (НДВ в прикладном ПО)",
+    "pp1119_level": "УЗ-3"
+  },
+  {
+    "name": "ГИС К2 без ДСП + УЗ-4",
+    "system_type": "ГИС государственного унитарного предприятия",
+    "organization_type": "государственное унитарное предприятие",
+    "fstek_117_class": "К2",
+    "fstek_21_class": "2Г",
+    "has_dsp": false,
+    "ispdn_category": "иные категории ПДн (ФИО, адрес, телефон)",
+    "ispdn_subjects_count": 50000,
+    "ispdn_subjects_category": "<100000",
+    "threat_type": "3-й тип (отсутствие недокументированных возможностей)",
+    "pp1119_level": "УЗ-4"
+  }
+]

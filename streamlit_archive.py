@@ -3,19 +3,16 @@ from pathlib import Path
 from collections import defaultdict
 import streamlit as st
 import json
+import re
 
 def render_archive_tab():
     st.header("📦 Отчёты и Архив")
     reports_dir = Path("reports")
     
-    if not reports_dir.exists() or not list(reports_dir.glob("system_audit_*.json")):
-        st.info("📭 Архив пуст.")
-        return
-    
-    # Группируем все файлы по system_name + временной метке из system_audit
+    # === Сбор всех сессий ===
     sessions = {}
     
-    # Сначала собираем system_audit — они задают канонические ts
+    # 1. Одиночные system_audit_*.json
     for f in sorted(reports_dir.glob("system_audit_*.json"), reverse=True):
         ts = f.stem.replace("system_audit_", "")
         try:
@@ -24,34 +21,54 @@ def render_archive_tab():
             sn = sa.get("system_name", ts)
         except:
             sn = ts
-        key = f"{sn}_{ts}"
-        if key not in sessions:
-            sessions[key] = {"system_audit": str(f), "sn": sn, "ts": ts, "docs": {}}
+        key = f"single_{ts}"
+        sessions[key] = {
+            "type": "single", "key": key, "system_audit": str(f),
+            "sn": sn, "ts": ts, "dir": reports_dir
+        }
     
-    # Добавляем остальные файлы
-    for prefix in ["01_matrix", "02_gaps", "03_target_config", "04_test_program", "05_conclusion"]:
-        for f in sorted(reports_dir.glob(f"{prefix}_*.json"), reverse=True):
-            f_ts = f.stem.replace(f"{prefix}_", "")
-            # Ищем сессию с такой же ts
-            for key, session in sessions.items():
-                if session["ts"] == f_ts:
-                    session["docs"][prefix] = str(f)
-                    break
+    # 2. Пакетные batch_*
+    for batch_dir in sorted(reports_dir.glob("batch_*"), reverse=True):
+        for session_dir in sorted(batch_dir.glob("*"), reverse=True):
+            if not session_dir.is_dir():
+                continue
+            sa_file = session_dir / "system_audit.json"
+            if not sa_file.exists():
+                continue
+            
+            ts = session_dir.name
+            try:
+                with open(sa_file) as fh:
+                    sa = json.load(fh)
+                cls = sa.get("classification", {})
+                sys_type = cls.get("system_type", "").split()[0]
+                cls_name = cls.get("fstek_117_class", "")
+                pp = cls.get("pp1119_level", "")
+                dsp = "ДСП" if cls.get("has_dsp") else ""
+                parts = [p for p in [sys_type, cls_name, pp, dsp] if p]
+                sn = f"{sa.get('system_name', 'ПАК')} | {' / '.join(parts)}"
+            except:
+                sn = ts
+            
+            key = f"batch_{batch_dir.name}_{session_dir.name}"
+            sessions[key] = {
+                "type": "batch", "key": key, "system_audit": str(sa_file),
+                "sn": sn, "ts": ts, "dir": session_dir
+            }
     
     if not sessions:
         st.info("📭 Архив пуст.")
         return
     
-    # Список для selectbox
+    # === Выбор сессии ===
     session_list = []
     for key, sess in sorted(sessions.items(), reverse=True):
-        sa_path = sess.get("system_audit", "")
         oa = {}
+        sa_path = sess.get("system_audit", "")
         if sa_path and Path(sa_path).exists():
             try:
                 with open(sa_path) as f:
-                    sa = json.load(f)
-                oa = sa.get("overall_assessment", {})
+                    oa = json.load(f).get("overall_assessment", {})
             except:
                 pass
         
@@ -60,12 +77,18 @@ def render_archive_tab():
         comp = oa.get("fully_compliant", 0)
         total = oa.get("total_requirements", 0)
         pct = oa.get("overall_compliance_pct", 0)
-        dt = f"{ts[:4]}.{ts[4:6]}.{ts[6:8]} {ts[9:11]}:{ts[11:13]}" if len(ts) >= 13 else ts
+        
+        # Дата из имени папки batch или из ts
+        try:
+            date_str = ts[:8] if sess["type"] == "single" else sess["dir"].parent.name.replace("batch_", "")
+            dt = f"{date_str[:4]}.{date_str[4:6]}.{date_str[6:8]}"
+        except:
+            dt = ts[:16]
         
         session_list.append({
             "key": key, "sn": sn, "ts": ts, "dt": dt,
             "comp": comp, "total": total, "pct": pct,
-            "docs": sess["docs"],
+            "type": sess["type"], "dir": sess["dir"],
             "system_audit": sa_path,
         })
     
@@ -76,134 +99,102 @@ def render_archive_tab():
     )
     
     sel = session_list[idx]
-    docs = sel["docs"]
+    session_dir = sel["dir"]
     sa_path = sel["system_audit"]
     
-    # Сводка
+    # === Сводка ===
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Система", sel["sn"])
     c2.metric("Требований", sel["total"])
     c3.metric("Соответствует", sel["comp"])
     c4.metric("%", f"{sel['pct']}%")
     
+    # === Документы сессии ===
     st.divider()
     st.subheader("📄 Документы сессии")
     
-    # Таблица документов с конвертацией
-    doc_list = [
-        ("01_matrix", "📋 Матрица требований", "matrix"),
-        ("02_gaps", "❌ Ведомость несоответствий", "gaps"),
-        ("03_target_config", "🎯 Целевая конфигурация", "target"),
-        ("04_test_program", "🧪 Программа испытаний", "test"),
-        ("05_conclusion", "📝 Заключение", "conclusion"),
-    ]
+    prefixes = ["01_matrix", "02_gaps", "03_target_config", "04_test_program", "05_conclusion"]
+    labels = ["📋 Матрица", "❌ Несоотв.", "🎯 Целевая КФГ", "🧪 Испытания", "📝 Заключение"]
     
-    for prefix, label, short in doc_list:
-        fpath = docs.get(prefix, "")
-        if not fpath or not Path(fpath).exists():
-            st.caption(f"{label} — файл не найден")
-            continue
+    # Для batch — ищем файлы в session_dir
+    if sel["type"] == "batch":
+        file_map = {}
+        for prefix in prefixes:
+            found = list(session_dir.glob(f"{prefix}_*")) + list(session_dir.glob(f"{prefix}.*"))
+            if found:
+                file_map[prefix] = str(found[0])
         
-        with st.expander(f"{label}", expanded=(prefix == "01_matrix")):
-            col1, col2, col3, col4 = st.columns(4)
-            
-            with col1:
-                with open(fpath, "rb") as fh:
-                    st.download_button("📄 JSON", fh.read(), file_name=Path(fpath).name,
-                                     mime="application/json", key=f"json_{sel['ts']}_{prefix}")
-            
-            with col2:
-                if st.button("📝 MD", key=f"md_{sel['ts']}_{prefix}"):
-                    from report_markdown import (
-                        generate_matrix_md, generate_gaps_md, generate_target_md,
-                        generate_test_md, generate_conclusion_md
-                    )
-                    generators = {
-                        "01_matrix": generate_matrix_md,
-                        "02_gaps": generate_gaps_md,
-                        "03_target_config": generate_target_md,
-                        "04_test_program": generate_test_md,
-                        "05_conclusion": generate_conclusion_md,
-                    }
-                    md_content = generators[prefix](fpath)
-                    md_path = Path(fpath).with_suffix('.md')
-                    md_path.write_text(md_content, encoding='utf-8')
-                    st.success(f"MD создан: {md_path.name}")
-                    st.rerun()
-            
-            with col3:
-                if st.button("📄 PDF", key=f"pdf_{sel['ts']}_{prefix}"):
-                    from report_markdown import (
-                        generate_matrix_md, generate_gaps_md, generate_target_md,
-                        generate_test_md, generate_conclusion_md
-                    )
-                    import markdown
-                    from weasyprint import HTML
-                    
-                    generators = {
-                        "01_matrix": generate_matrix_md,
-                        "02_gaps": generate_gaps_md,
-                        "03_target_config": generate_target_md,
-                        "04_test_program": generate_test_md,
-                        "05_conclusion": generate_conclusion_md,
-                    }
-                    md_content = generators[prefix](fpath)
-                    html = f"""<!DOCTYPE html><html><head><meta charset="utf-8">
-<style>body{{font-family:'Times New Roman',serif;font-size:11pt;margin:1.5cm;}}
-table{{border-collapse:collapse;width:100%;margin:8px 0;}}
-th,td{{border:1px solid #333;padding:5px;font-size:9pt;}}
-th{{background-color:#4472C4;color:white;}}</style></head>
-<body>{markdown.markdown(md_content, extensions=['tables'])}</body></html>"""
-                    pdf_path = Path(fpath).with_suffix('.pdf')
-                    HTML(string=html).write_pdf(str(pdf_path))
-                    st.success(f"PDF создан: {pdf_path.name}")
-                    st.rerun()
-            
-            with col4:
-                # Показываем ссылки на существующие MD/PDF
-                md_file = Path(fpath).with_suffix('.md')
-                pdf_file = Path(fpath).with_suffix('.pdf')
-                if md_file.exists():
-                    with open(md_file, "rb") as fh:
-                        st.download_button("📥 MD", fh.read(), file_name=md_file.name,
-                                         mime="text/markdown", key=f"dl_md_{sel['ts']}_{prefix}")
-                if pdf_file.exists():
-                    with open(pdf_file, "rb") as fh:
-                        st.download_button("📥 PDF", fh.read(), file_name=pdf_file.name,
-                                         mime="application/pdf", key=f"dl_pdf_{sel['ts']}_{prefix}")
+        cols = st.columns(5)
+        for i, (prefix, label) in enumerate(zip(prefixes, labels)):
+            with cols[i]:
+                fpath = file_map.get(prefix, "")
+                if fpath and Path(fpath).exists():
+                    with open(fpath, "rb") as fh:
+                        st.download_button(label, fh.read(), file_name=Path(fpath).name,
+                                         mime="application/json", use_container_width=True,
+                                         key=f"dl_{sel['ts']}_{prefix}")
+                else:
+                    st.caption(f"{label}\n—")
+    else:
+        # Для single — старый поиск по ts
+        file_map = {}
+        for prefix in prefixes:
+            found = list(reports_dir.glob(f"{prefix}_*{sel['ts']}*.json"))
+            if found:
+                file_map[prefix] = str(found[0])
+        
+        cols = st.columns(5)
+        for i, (prefix, label) in enumerate(zip(prefixes, labels)):
+            with cols[i]:
+                fpath = file_map.get(prefix, "")
+                if fpath and Path(fpath).exists():
+                    with open(fpath, "rb") as fh:
+                        st.download_button(label, fh.read(), file_name=Path(fpath).name,
+                                         mime="application/json", use_container_width=True,
+                                         key=f"dl_{sel['ts']}_{prefix}")
+                else:
+                    st.caption(f"{label}\n—")
     
+    # === Офисные форматы ===
     st.divider()
     st.subheader("📄 Офисные форматы")
     
+    if sel["type"] == "batch":
+        # Ищем в session_dir
+        docx_files = list(session_dir.glob("protocol_*.docx"))
+        xlsx_files = list(session_dir.glob("matrix_*.xlsx"))
+    else:
+        docx_files = list(reports_dir.glob(f"protocol_*{sel['ts']}*.docx"))
+        xlsx_files = list(reports_dir.glob(f"matrix_*{sel['ts']}*.xlsx"))
+    
     cd, cx = st.columns(2)
     with cd:
-        if sa_path and Path(sa_path).exists():
-            docx_files = sorted(reports_dir.glob("protocol_*.docx"), key=lambda x: x.stat().st_mtime, reverse=True)[:1]
-            if docx_files:
-                with open(docx_files[0], "rb") as fh:
-                    st.download_button("📥 Скачать DOCX", fh.read(), file_name=docx_files[0].name,
-                                     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                                     key=f"dl_docx_{sel['ts']}")
-            else:
-                if st.button("🔄 Создать DOCX", key=f"gen_docx_{sel['ts']}"):
-                    from report_docx import FSTEKReportGenerator
-                    FSTEKReportGenerator(sa_path).generate()
-                    st.rerun()
+        if docx_files:
+            with open(docx_files[0], "rb") as fh:
+                st.download_button("📥 Скачать DOCX", fh.read(), file_name=docx_files[0].name,
+                                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                 key=f"dl_docx_{sel['ts']}")
+        elif sa_path and Path(sa_path).exists():
+            if st.button("🔄 Создать DOCX", key=f"gen_docx_{sel['ts']}"):
+                from report_docx import FSTEKReportGenerator
+                out = session_dir / f"protocol_{sel['sn'][:30]}.docx" if sel["type"] == "batch" else None
+                FSTEKReportGenerator(sa_path).generate(str(out) if out else None)
+                st.rerun()
     
     with cx:
-        if sa_path and Path(sa_path).exists():
-            xlsx_files = sorted(reports_dir.glob("matrix_*.xlsx"), key=lambda x: x.stat().st_mtime, reverse=True)[:1]
-            if xlsx_files:
-                with open(xlsx_files[0], "rb") as fh:
-                    st.download_button("📥 Скачать XLSX", fh.read(), file_name=xlsx_files[0].name,
-                                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                                     key=f"dl_xlsx_{sel['ts']}")
-            else:
-                if st.button("🔄 Создать XLSX", key=f"gen_xlsx_{sel['ts']}"):
-                    from report_xlsx import FSTEKExcelGenerator
-                    FSTEKExcelGenerator(sa_path).generate()
-                    st.rerun()
+        if xlsx_files:
+            with open(xlsx_files[0], "rb") as fh:
+                st.download_button("📥 Скачать XLSX", fh.read(), file_name=xlsx_files[0].name,
+                                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                 key=f"dl_xlsx_{sel['ts']}")
+        elif sa_path and Path(sa_path).exists():
+            if st.button("🔄 Создать XLSX", key=f"gen_xlsx_{sel['ts']}"):
+                from report_xlsx import FSTEKExcelGenerator
+                out = session_dir / f"matrix_{sel['sn'][:30]}.xlsx" if sel["type"] == "batch" else None
+                FSTEKExcelGenerator(sa_path).generate(str(out) if out else None)
+                st.rerun()
     
+    # === Markdown / PDF ===
     st.divider()
     st.subheader("📝 Единый отчёт (Markdown / PDF)")
     
@@ -212,24 +203,36 @@ th{{background-color:#4472C4;color:white;}}</style></head>
         with mc1:
             if st.button("📝 Создать Markdown", key=f"md_{sel['ts']}", use_container_width=True):
                 from report_markdown import generate_full_report_md
-                md_content = generate_full_report_md(sa_path)
-                md_path = reports_dir / f"full_report_{sel['sn']}_{sel['ts']}.md"
-                md_path.write_text(md_content, encoding='utf-8')
+                md = generate_full_report_md(sa_path)
+                safe = sel['sn'][:30].replace('/', '_').replace('|', '_').replace(' ', '_').strip('_')
+                out = session_dir / f"full_report_{safe}.md" if sel["type"] == "batch" else Path(sa_path).with_suffix('.md')
+                out.write_text(md, encoding='utf-8')
                 st.success("Markdown создан")
                 st.rerun()
         with mc2:
             if st.button("📄 Создать PDF", key=f"pdf_{sel['ts']}", use_container_width=True):
                 from report_markdown import generate_full_report_pdf
+                safe = sel['sn'][:30].replace('/', '_').replace('|', '_').replace(' ', '_').strip('_')
+                out = session_dir / f"full_report_{safe}.pdf" if sel["type"] == "batch" else None
                 try:
-                    pdf_path = reports_dir / f"full_report_{sel['sn']}_{sel['ts']}.pdf"
-                    generate_full_report_pdf(sa_path, str(pdf_path))
-                    st.success(f"PDF создан: {pdf_path.name}")
-                    st.rerun()
+                    generate_full_report_pdf(sa_path, str(out) if out else None)
+                    st.success("PDF создан")
                 except Exception as e:
-                    st.error(f"Ошибка: {e}")
+                    st.error(f"Ошибка PDF: {e}")
+                st.rerun()
     
-    md_files = sorted(reports_dir.glob("full_report_*.md"), key=lambda x: x.stat().st_mtime, reverse=True)[:3]
-    pdf_files = sorted(reports_dir.glob("full_report_*.pdf"), key=lambda x: x.stat().st_mtime, reverse=True)[:3]
+    # Показать существующие
+    # Ищем MD/PDF в папке сессии
+    if sel["type"] == "batch":
+        md_files = list(session_dir.glob("*.md"))
+        pdf_files = list(session_dir.glob("*.pdf"))
+    else:
+        md_files = list(reports_dir.glob(f"full_report_*{sel['ts']}*.md"))
+        pdf_files = list(reports_dir.glob(f"full_report_*{sel['ts']}*.pdf"))
+    # Добавляем поиск в текущей папке для batch
+    if sel["type"] == "batch":
+        md_files = list(session_dir.glob("*.md"))
+        pdf_files = list(session_dir.glob("*.pdf"))
     
     for f in md_files:
         with open(f, "rb") as fh:
@@ -238,43 +241,62 @@ th{{background-color:#4472C4;color:white;}}</style></head>
         with open(f, "rb") as fh:
             st.download_button(f"📄 {f.name}", fh.read(), file_name=f.name, mime="application/pdf", key=f"dl_pdf_{f.name}")
     
+    # === SVG ===
     st.divider()
     st.subheader("📐 Целевая конфигурация (SVG)")
     
-    tc_path = docs.get("03_target_config", sa_path)
-    if tc_path and Path(tc_path).exists():
-        svg_files = sorted(reports_dir.glob("target_config_*.svg"), key=lambda x: x.stat().st_mtime, reverse=True)[:1]
-        if svg_files:
-            with open(svg_files[0], "rb") as fh:
-                st.download_button("📥 Скачать SVG", fh.read(), file_name=svg_files[0].name, mime="image/svg+xml", key=f"dl_svg_{sel['ts']}")
+    svg_files = []
+    tc_json = []
+    if sel["type"] == "batch":
+        svg_files = sorted(session_dir.glob("target_config_*.svg"), key=lambda x: x.stat().st_mtime, reverse=True)
+        tc_json = list(session_dir.glob("03_target_config_*.json"))
+    else:
+        svg_files = list(reports_dir.glob(f"target_config_*{sel['ts']}*.svg"))
+        tc_json = list(reports_dir.glob(f"03_target_config_*{sel['ts']}*.json"))
+    
+    if svg_files:
+        with open(svg_files[0], "rb") as fh:
+            st.download_button("📥 Скачать SVG", fh.read(), file_name=svg_files[0].name,
+                             mime="image/svg+xml", key=f"dl_svg_{sel['ts']}")
+    
+    graph_source = str(tc_json[0]) if tc_json else sa_path
+    if graph_source and Path(graph_source).exists():
         if st.button("🖼️ Пересоздать SVG", key=f"graph_{sel['ts']}"):
             from target_config_graph import generate_target_config_svg
-            generate_target_config_svg(tc_path, str(reports_dir / f"target_config_{sel['sn']}_{sel['ts']}.svg"))
+            safe_name = sel['sn'][:30].replace('/', '_').replace('|', '_').replace(' ', '_').strip('_')
+            out = session_dir / f"target_config_{safe_name}.svg" if sel["type"] == "batch" else None
+            generate_target_config_svg(graph_source, str(out) if out else None)
             st.success("SVG создана")
             st.rerun()
     
+    # === ZIP ===
     st.divider()
     st.subheader("📦 ZIP-пакет")
     
     zip_path = reports_dir / f"package_{sel['ts']}.zip"
     import zipfile
-    with zipfile.ZipFile(zip_path, 'w') as zf:
-        for prefix, fpath in docs.items():
-            p = Path(fpath)
-            if p.exists():
-                zf.write(p, p.name)
-        if sa_path and Path(sa_path).exists():
-            zf.write(sa_path, Path(sa_path).name)
-        for pat in ["protocol_*.docx", "matrix_*.xlsx", "target_config_*.svg", "full_report_*.md", "full_report_*.pdf"]:
-            for ff in sorted(reports_dir.glob(pat), key=lambda x: x.stat().st_mtime, reverse=True)[:1]:
-                zf.write(ff, ff.name)
+    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED, allowZip64=True) as zf:
+        if sel["type"] == "batch":
+            for ff in session_dir.glob("*"):
+                if ff.is_file() and not ff.name.endswith('.zip'):
+                    zf.write(ff, ff.name)
+        else:
+            for f in reports_dir.glob(f"*{sel['ts']}*"):
+                if f.is_file() and 'batch_' not in str(f):
+                    zf.write(f, f.name)
     
     with open(zip_path, "rb") as fh:
         st.download_button("📦 ZIP (все документы)", fh.read(), file_name=zip_path.name,
                          mime="application/zip", use_container_width=True, key=f"zip_{sel['ts']}")
     
+    # === Очистка ===
     st.divider()
-    with st.expander("🗑️ Управление"):
-        total = len(list(reports_dir.glob("*")))
-        size = sum(f.stat().st_size for f in reports_dir.glob("*") if f.is_file()) / 1024 / 1024
-        st.write(f"Файлов: {total}, Размер: {size:.1f} MB")
+    with st.expander("🗑️ Управление архивом"):
+        total_files = len(list(reports_dir.glob("**/*")))
+        total_size = sum(f.stat().st_size for f in reports_dir.glob("**/*") if f.is_file()) / 1024 / 1024
+        st.write(f"Файлов: {total_files}, Размер: {total_size:.1f} MB")
+        if st.button("🗑️ Удалить ZIP-архивы"):
+            for f in reports_dir.glob("package_*.zip"):
+                f.unlink()
+            st.success("ZIP удалены")
+            st.rerun()

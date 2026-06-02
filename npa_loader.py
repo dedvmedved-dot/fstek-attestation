@@ -163,8 +163,22 @@ class NPALoader:
             paragraphs = self.load_pdf(str(pdf_path))
 
             if not paragraphs:
-                print(f"   ⚠️  Не найдено структурированных параграфов")
-                continue
+                print(f"   ⚠️  Нет структурированных параграфов — индексируем по страницам")
+                # Для документов без параграфов — сохраняем текст страниц целиком
+                loader_full = PyPDFLoader(str(pdf_path))
+                pages = loader_full.load()
+                for j, page in enumerate(pages):
+                    text = re.sub(r'\s+', ' ', page.page_content).strip()
+                    if len(text) > 100:  # Игнорируем пустые страницы
+                        paragraphs.append({
+                            "id": f"{Path(pdf_path).stem}::page_{j}",
+                            "paragraph_id": f"стр.{j+1}",
+                            "text": text[:4000],
+                            "source": Path(pdf_path).stem,
+                        })
+                if not paragraphs:
+                    print(f"   ⚠️  Документ не содержит текста")
+                    continue
 
             ids = [p["id"] for p in paragraphs]
             documents = [p["text"] for p in paragraphs]

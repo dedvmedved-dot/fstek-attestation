@@ -60,7 +60,7 @@ with st.sidebar:
         st.session_state.audit_results = None
 
 # Вкладки
-tab1, tab2, tab3, tab4 = st.tabs(["📊 Покомпонентный", "🧩 Системный аудит", "📋 Компоненты", "📦 Отчёты и Архив"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 Покомпонентный", "🧩 Системный аудит", "📋 Компоненты", "💬 RAG-Чат", "📦 Отчёты и Архив"])
 
 # Загрузка данных
 if uploaded_file is not None:
@@ -183,7 +183,7 @@ if st.session_state.audit_running and st.session_state.audit_results is None:
         st.rerun()
 
 # ==================== TAB1: ПОКОМПОНЕНТНЫЙ ====================
-with tab1:
+with tab3:
     if st.session_state.audit_results:
         results = st.session_state.audit_results
         st.header("📊 Результаты покомпонентного аудита")
@@ -271,7 +271,12 @@ with tab2:
                 st.write(f"**Результат:** {s.get('expected_result', '')}")
 
 # ==================== TAB3: КОМПОНЕНТЫ ====================
-with tab3:
+with tab4:
+    from streamlit_chat import render_chat_tab
+    render_chat_tab()
+
+# ==================== TAB4: ОТЧЁТЫ И АРХИВ ====================
+with tab1:
     st.header("📋 Компоненты системы")
     
     if "editable_components" not in st.session_state:
@@ -321,7 +326,6 @@ with tab3:
                 if st.button("🗑️ Удалить", key=f"del_comp_{i}"):
                     st.session_state.editable_components.pop(i); st.rerun()
 
-# ==================== TAB4: ОТЧЁТЫ И АРХИВ ====================
-with tab4:
+with tab5:
     from streamlit_archive import render_archive_tab
     render_archive_tab()

@@ -102,7 +102,7 @@ def generate_conclusion_md(json_path: str) -> str:
 def generate_full_report_md(audit_json_path: str) -> str:
     """Единый Markdown из всех 5 файлов сессии."""
     sa_path = Path(audit_json_path)
-    reports_dir = sa_path.parent
+    reports_dir = sa_path.parent  # Для batch это папка сессии, для single — reports/
     
     with open(sa_path) as f:
         data = json.load(f)
@@ -111,12 +111,13 @@ def generate_full_report_md(audit_json_path: str) -> str:
     classification = data.get("classification", {})
     ts = sa_path.stem.replace("system_audit_", "")
     
-    # Находим файлы по ts (игнорируем system_name в имени)
-    matrix_f = list(reports_dir.glob(f"01_matrix_*{ts}.json"))
-    gaps_f = list(reports_dir.glob(f"02_gaps_*{ts}.json"))
-    target_f = list(reports_dir.glob(f"03_target_config_*{ts}.json"))
-    test_f = list(reports_dir.glob(f"04_test_program_*{ts}.json"))
-    conclusion_f = list(reports_dir.glob(f"05_conclusion_*{ts}.json"))
+    # Ищем файлы в папке с system_audit.json
+    search_dir = sa_path.parent
+    matrix_f = list(search_dir.glob("01_matrix_*.json"))
+    gaps_f = list(search_dir.glob("02_gaps_*.json"))
+    target_f = list(search_dir.glob("03_target_config_*.json"))
+    test_f = list(search_dir.glob("04_test_program_*.json"))
+    conclusion_f = list(search_dir.glob("05_conclusion_*.json"))
     
     files = {
         "matrix": matrix_f[0] if matrix_f else None,
@@ -144,8 +145,11 @@ def generate_full_report_md(audit_json_path: str) -> str:
 
 
 def generate_full_report_pdf(audit_json_path: str, output_path: str = None) -> str:
-    import markdown
-    from weasyprint import HTML
+    try:
+        import markdown
+        from weasyprint import HTML
+    except ImportError:
+        return ""
     
     md = generate_full_report_md(audit_json_path)
     html = f"""<!DOCTYPE html><html><head><meta charset="utf-8">

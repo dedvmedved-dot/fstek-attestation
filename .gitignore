@@ -38,3 +38,6 @@ postgres_data/
 chroma_data/
 redis_data/
 ollama_data/
+reports/
+chats/
+*.Identifier

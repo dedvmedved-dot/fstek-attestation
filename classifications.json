@@ -1,0 +1,29 @@
+[
+  {
+    "name": "КИИ К1 ДСП УЗ-3",
+    "system_type": "КИИ государственного унитарного предприятия",
+    "organization_type": "государственное унитарное предприятие",
+    "fstek_117_class": "К1",
+    "fstek_21_class": "1Г",
+    "fstek_239_class": "КЗ-1",
+    "has_dsp": true,
+    "ispdn_category": "иные категории ПДн",
+    "ispdn_subjects_count": 100000,
+    "ispdn_subjects_category": ">100000",
+    "threat_type": "3-й тип (отсутствие недокументированных возможностей)",
+    "pp1119_level": "УЗ-3"
+  },
+  {
+    "name": "ИСПДн К1 ДСП УЗ-3",
+    "system_type": "ИСПДн государственного унитарного предприятия",
+    "organization_type": "государственное унитарное предприятие",
+    "fstek_117_class": "К1",
+    "fstek_21_class": "1Г",
+    "has_dsp": true,
+    "ispdn_category": "иные категории ПДн",
+    "ispdn_subjects_count": 100000,
+    "ispdn_subjects_category": ">100000",
+    "threat_type": "3-й тип (отсутствие недокументированных возможностей)",
+    "pp1119_level": "УЗ-3"
+  }
+]
